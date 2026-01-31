@@ -32,6 +32,8 @@ const confettiCanvas = document.getElementById('confettiCanvas');
 const confettiCtx = confettiCanvas.getContext('2d');
 const shareTwitterBtn = document.getElementById('shareTwitter');
 const shareWhatsAppBtn = document.getElementById('shareWhatsApp');
+const timerDisplay = document.getElementById('timerDisplay');
+const completionStats = document.getElementById('completionStats');
 
 // Game state
 let puzzle = null;
@@ -45,6 +47,10 @@ let gamePaused = false;
 let animationId = null;
 let score = 0;
 let failCount = 0;
+
+// Session timer (persists across retries)
+let sessionStartTime = null;
+let completionTime = null;
 
 // Flappy Bird style constants (values may be overridden for mobile)
 let PLAYER_X = 150; // Fixed X position for player
@@ -237,30 +243,22 @@ function resizeCanvas() {
 
 // Draw initial screen before game starts
 function drawInitialScreen() {
-  ctx.fillStyle = '#87ceeb';
+  // Just draw a clean sky gradient background
+  const gradient = ctx.createLinearGradient(0, 0, 0, canvasHeight);
+  gradient.addColorStop(0, '#87CEEB');
+  gradient.addColorStop(1, '#E0F6FF');
+  ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-  
-  // Draw title text
-  ctx.fillStyle = '#333';
-  ctx.font = 'bold 48px Arial';
-  ctx.textAlign = 'center';
-  ctx.fillText('Flappy Puzzle', canvasWidth / 2, canvasHeight / 2 - 100);
-  
-  // Draw phrase info
-  ctx.font = '24px Arial';
-  ctx.fillText(`Collect ${puzzle.getNonSpaceCount()} letters to reveal the phrase!`, 
-               canvasWidth / 2, canvasHeight / 2 - 40);
-  
-  ctx.font = '20px Arial';
-  ctx.fillStyle = '#666';
-  ctx.fillText('Click or press SPACE to start', 
-               canvasWidth / 2, canvasHeight / 2 + 20);
 }
 
 // Update HUD display
 function updateHUD() {
   piecesDisplay.textContent = puzzle.getReconstructedPhrase();
   progressText.textContent = `${puzzle.getCollectedNonSpaceCount()} / ${puzzle.getNonSpaceCount()} letters`;
+
+  // Apply RTL for Hebrew phrases
+  const hasHebrew = /[\u0590-\u05FF]/.test(puzzle.originalPhrase);
+  piecesDisplay.style.direction = hasHebrew ? 'rtl' : 'ltr';
 }
 
 // Start the game
@@ -268,7 +266,12 @@ function startGame() {
   gameStarted = true;
   gameOver = false;
   instructions.classList.add('hidden');
-  
+
+  // Start session timer only on first start (not on retry)
+  if (sessionStartTime === null) {
+    sessionStartTime = performance.now();
+  }
+
   // Create game objects
   world = new World(canvasWidth, canvasHeight);
   player = new Player(PLAYER_X, canvasHeight / 2, { gravity: PLAYER_GRAVITY, flapStrength: PLAYER_FLAP, emoji: playerEmoji });
@@ -300,21 +303,27 @@ function shuffleArray(array) {
 function showGuessModal() {
   gamePaused = true;
   cancelAnimationFrame(animationId);
-  
+
   // Show current progress as hint with styled slots
   const phrase = puzzle.getReconstructedPhrase();
+
+  // Detect if phrase contains Hebrew characters for RTL support
+  const hasHebrew = /[\u0590-\u05FF]/.test(puzzle.originalPhrase);
+  guessHint.setAttribute('dir', hasHebrew ? 'rtl' : 'ltr');
+  guessInput.style.direction = hasHebrew ? 'rtl' : 'ltr';
+
   guessHint.innerHTML = phrase.split('').map(char => {
     if (char === ' ') {
       return '<span style="display:inline-block;width:0.5em;"></span>';
     }
     const isCollected = char !== '_';
-    return `<span class="letter-slot" style="${isCollected ? 'border-bottom-color:#48bb78;color:#48bb78;' : ''}">${char}</span>`;
+    return `<span class="letter-slot" style="${isCollected ? 'border-bottom-color:#7EC8E3;color:#7EC8E3;' : ''}">${char}</span>`;
   }).join('');
-  
+
   guessInput.value = '';
   guessError.classList.add('hidden');
   guessModal.classList.remove('hidden');
-  
+
   // Focus the input
   setTimeout(() => guessInput.focus(), 100);
 }
@@ -359,15 +368,39 @@ function submitGuess() {
 }
 
 // Main game loop
+// Format time as M:SS or M:SS.s
+function formatTime(ms, includeDecimal = false) {
+  const totalSeconds = ms / 1000;
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = Math.floor(totalSeconds % 60);
+  const decimal = Math.floor((totalSeconds % 1) * 10);
+
+  if (includeDecimal) {
+    return `${minutes}:${seconds.toString().padStart(2, '0')}.${decimal}`;
+  }
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+}
+
+// Update timer display
+function updateTimer() {
+  if (sessionStartTime !== null && timerDisplay) {
+    const elapsed = performance.now() - sessionStartTime;
+    timerDisplay.textContent = formatTime(elapsed);
+  }
+}
+
 function gameLoop() {
   if (!gameStarted || gameOver || gamePaused) return;
-  
+
+  // Update timer
+  updateTimer();
+
   // Update
   update();
-  
+
   // Draw
   draw();
-  
+
   // Continue loop
   animationId = requestAnimationFrame(gameLoop);
 }
@@ -536,6 +569,9 @@ function checkCollisions() {
       updateHUD();
       playCollectSound();
 
+      // Trigger visual effect on player
+      player.triggerCollectEffect();
+
       // Remove any other on-screen collectibles of same character
       collectibles.forEach(c => {
         if (!c.collected && c.pieceText === collectible.pieceText) {
@@ -560,34 +596,36 @@ function triggerGameOver() {
 // Show game over screen
 function showGameOverScreen() {
   // Draw semi-transparent overlay
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+  ctx.fillStyle = 'rgba(30, 58, 95, 0.85)';
   ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-  
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
   // Game over text
   ctx.fillStyle = '#FF6B6B';
-  ctx.font = 'bold 60px Arial';
-  ctx.textAlign = 'center';
-  ctx.fillText('Game Over!', canvasWidth / 2, canvasHeight / 2 - 50);
-  
+  ctx.font = "bold 52px 'Secular One', sans-serif";
+  ctx.fillText('Game Over!', canvasWidth / 2, canvasHeight / 2 - 60);
+
   // Instructions
   ctx.fillStyle = '#FFF';
-  ctx.font = '28px Arial';
-  ctx.fillText('Click or press SPACE to retry', canvasWidth / 2, canvasHeight / 2 + 30);
-  
+  ctx.font = "24px 'Secular One', sans-serif";
+  ctx.fillText('Click or press SPACE to retry', canvasWidth / 2, canvasHeight / 2 + 10);
+
   // Progress
-  ctx.font = '20px Arial';
-  ctx.fillStyle = '#FFD93D';
+  ctx.font = "20px 'Secular One', sans-serif";
+  ctx.fillStyle = '#7EC8E3';
   ctx.fillText(
     `Collected: ${puzzle.getCollectedNonSpaceCount()} / ${puzzle.getNonSpaceCount()} letters`,
     canvasWidth / 2,
-    canvasHeight / 2 + 80
+    canvasHeight / 2 + 60
   );
 
   // Show fail counter on game over if greater than zero
   if (failCount > 0) {
-    ctx.font = '18px Arial';
+    ctx.font = "18px 'Secular One', sans-serif";
     ctx.fillStyle = '#FFD93D';
-    ctx.fillText(`Fails: ${failCount}`, canvasWidth / 2, canvasHeight / 2 + 120);
+    ctx.fillText(`Fails: ${failCount}`, canvasWidth / 2, canvasHeight / 2 + 100);
   }
 }
 
@@ -719,15 +757,21 @@ function startConfetti() {
 
 // Show victory screen
 function showVictory() {
+  // Calculate completion time
+  completionTime = performance.now() - sessionStartTime;
+
   victoryScreen.classList.remove('hidden');
   solvedPhrase.textContent = puzzle.originalPhrase;
-  // Show fail counter on victory screen if > 0
-  if (failCount > 0 && failCountDisplay) {
-    failCountDisplay.textContent = `Fails: ${failCount}`;
-    failCountDisplay.classList.remove('hidden');
-  } else if (failCountDisplay) {
-    failCountDisplay.classList.add('hidden');
+
+  // Show completion stats (time and fails)
+  if (completionStats) {
+    const timeStr = formatTime(completionTime, true);
+    const failsText = failCount === 0
+      ? '<span class="flawless">FLAWLESS!</span>'
+      : `${failCount} fail${failCount > 1 ? 's' : ''}`;
+    completionStats.innerHTML = `<span class="time">${timeStr}</span> · ${failsText}`;
   }
+
   // Start confetti celebration
   startConfetti();
 }
@@ -740,15 +784,22 @@ playAgainBtn.addEventListener('click', () => {
 });
 
 // Share button handlers
+// Generate share text with stats
+function getShareText() {
+  const timeStr = formatTime(completionTime, true);
+  const failsText = failCount === 0 ? 'FLAWLESS' : `${failCount} fail${failCount > 1 ? 's' : ''}`;
+  return `I solved this Puzzle Runner in ${timeStr} (${failsText})! 🎉 Can you beat my time?`;
+}
+
 shareTwitterBtn.addEventListener('click', () => {
-  const text = `I just solved a Puzzle Runner challenge! 🎉 Can you figure out the secret phrase?`;
+  const text = getShareText();
   const url = window.location.href;
   const twitterUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`;
   window.open(twitterUrl, '_blank', 'width=550,height=420');
 });
 
 shareWhatsAppBtn.addEventListener('click', () => {
-  const text = `I just solved a Puzzle Runner challenge! 🎉 Can you figure out the secret phrase?\n${window.location.href}`;
+  const text = `${getShareText()}\n${window.location.href}`;
   const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(text)}`;
   window.open(whatsappUrl, '_blank');
 });
