@@ -1,0 +1,158 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 20px;
+}
+
+.container {
+  background: white;
+  border-radius: 12px;
+  padding: 40px;
+  max-width: 600px;
+  width: 100%;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+}
+
+h1 {
+  color: #333;
+  margin-bottom: 10px;
+  font-size: 2.5em;
+  text-align: center;
+}
+
+.subtitle {
+  color: #666;
+  text-align: center;
+  margin-bottom: 30px;
+  font-size: 1.1em;
+}
+
+.form-section {
+  margin-bottom: 30px;
+}
+
+label {
+  display: block;
+  margin-bottom: 10px;
+  color: #444;
+  font-weight: 500;
+  font-size: 1em;
+}
+
+#phraseInput {
+  width: 100%;
+  padding: 15px;
+  font-size: 1.1em;
+  border: 2px solid #ddd;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  transition: border-color 0.3s;
+}
+
+#phraseInput:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+.btn-primary,
+.btn-secondary {
+  padding: 15px 30px;
+  font-size: 1.1em;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s;
+  font-weight: 600;
+}
+
+.btn-primary {
+  background: #667eea;
+  color: white;
+  width: 100%;
+}
+
+.btn-primary:hover {
+  background: #5568d3;
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+}
+
+.btn-primary:active {
+  transform: translateY(0);
+}
+
+.btn-secondary {
+  background: #48bb78;
+  color: white;
+}
+
+.btn-secondary:hover {
+  background: #38a169;
+}
+
+.link-section {
+  padding-top: 20px;
+  border-top: 2px solid #eee;
+  margin-top: 20px;
+}
+
+.link-section.hidden {
+  display: none;
+}
+
+.link-container {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.link-input {
+  flex: 1;
+  padding: 12px;
+  font-size: 0.95em;
+  border: 2px solid #ddd;
+  border-radius: 8px;
+  background: #f9f9f9;
+  font-family: monospace;
+}
+
+.success-message {
+  color: #48bb78;
+  font-weight: 500;
+  text-align: center;
+  padding: 10px;
+  background: #f0fff4;
+  border-radius: 6px;
+}
+
+.success-message.hidden {
+  display: none;
+}
+
+@media (max-width: 600px) {
+  .container {
+    padding: 25px;
+  }
+  
+  h1 {
+    font-size: 2em;
+  }
+  
+  .link-container {
+    flex-direction: column;
+  }
+  
+  .btn-secondary {
+    width: 100%;
+  }
+}

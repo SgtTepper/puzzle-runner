@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Puzzle Runner - Create Challenge</title>
+  <link rel="stylesheet" href="styles/sender.css">
+</head>
+<body>
+  <div class="container">
+    <h1>Puzzle Runner</h1>
+    <p class="subtitle">Create a phrase collection challenge for your friends!</p>
+    
+    <div class="form-section">
+      <label for="phraseInput">Enter a word or phrase:</label>
+      <input 
+        type="text" 
+        id="phraseInput" 
+        placeholder="e.g., Hello World!" 
+        maxlength="200"
+        autofocus
+      />
+      
+      <button id="generateBtn" class="btn-primary">Generate Link</button>
+    </div>
+    
+    <div id="linkSection" class="link-section hidden">
+      <label for="generatedLink">Share this link:</label>
+      <div class="link-container">
+        <input 
+          type="text" 
+          id="generatedLink" 
+          readonly 
+          class="link-input"
+        />
+        <button id="copyBtn" class="btn-secondary">Copy Link</button>
+      </div>
+      <p class="success-message hidden" id="copySuccess">✓ Copied to clipboard!</p>
+    </div>
+  </div>
+  
+  <script type="module" src="src/sender.js"></script>
+</body>
+</html>

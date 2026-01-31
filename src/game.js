@@ -1,0 +1,451 @@
+import { decodeFromUrlSafe } from './utils/urlEncoding.js';
+import { Puzzle } from './puzzle.js';
+import { Player } from './player.js';
+import { World } from './world.js';
+import { Collectible } from './collectible.js';
+import { Obstacle } from './obstacle.js';
+
+// Get URL parameters
+const urlParams = new URLSearchParams(window.location.search);
+const encodedPhrase = urlParams.get('p');
+
+// DOM elements
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const piecesDisplay = document.getElementById('piecesDisplay');
+const progressText = document.getElementById('progressText');
+const victoryScreen = document.getElementById('victoryScreen');
+const solvedPhrase = document.getElementById('solvedPhrase');
+const playAgainBtn = document.getElementById('playAgainBtn');
+const instructions = document.getElementById('instructions');
+const startBtn = document.getElementById('startBtn');
+
+// Game state
+let puzzle = null;
+let player = null;
+let world = null;
+let collectibles = [];
+let obstacles = [];
+let gameStarted = false;
+let gameOver = false;
+let animationId = null;
+let score = 0;
+
+// Flappy Bird style constants
+const PLAYER_X = 150; // Fixed X position for player
+const OBSTACLE_SPAWN_DISTANCE = 350; // Distance between obstacles (increased for better spacing)
+const GAP_SIZE = 200; // Size of gap in obstacles (increased for easier gameplay)
+const MIN_GAP_Y = 150; // Minimum gap center Y
+let lastObstacleX = 0; // Track last obstacle X position
+
+// Track which pieces need to spawn
+let piecesToSpawn = [];
+let frameCount = 0;
+
+// Initialize the game
+function init() {
+  // Check if phrase parameter exists
+  if (!encodedPhrase) {
+    alert('No puzzle found! Please use a valid link from the sender page.');
+    window.location.href = 'sender.html';
+    return;
+  }
+  
+  try {
+    // Decode the phrase
+    const phrase = decodeFromUrlSafe(encodedPhrase);
+    console.log('Decoded phrase:', phrase);
+    
+    // Create puzzle (spaces are auto-collected in the Puzzle constructor)
+    puzzle = new Puzzle(phrase);
+    console.log('Puzzle pieces:', puzzle.pieces);
+    console.log('Non-space pieces to collect:', puzzle.getNonSpaceCount());
+    
+    // Set up canvas
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
+    
+    // Set up input listeners
+    setupInput();
+    
+    // Update HUD
+    updateHUD();
+    
+    // Draw initial state
+    drawInitialScreen();
+    
+  } catch (error) {
+    console.error('Error decoding phrase:', error);
+    alert('Invalid puzzle link! Please check the URL.');
+    window.location.href = 'sender.html';
+  }
+}
+
+// Set up keyboard and mouse input
+function setupInput() {
+  // Keyboard input - Space to flap
+  window.addEventListener('keydown', (e) => {
+    if (e.code === 'Space') {
+      e.preventDefault();
+      
+      if (!gameStarted) {
+        startGame();
+      } else if (gameOver) {
+        resetGame();
+      } else if (player) {
+        player.flap();
+      }
+    }
+  });
+  
+  // Mouse/touch input - Click/tap to flap
+  canvas.addEventListener('click', () => {
+    if (!gameStarted) {
+      startGame();
+    } else if (gameOver) {
+      resetGame();
+    } else if (player) {
+      player.flap();
+    }
+  });
+}
+
+// Resize canvas to fill window
+function resizeCanvas() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  
+  if (world) {
+    world.resize(canvas.width, canvas.height);
+  }
+  
+  if (!gameStarted && puzzle) {
+    drawInitialScreen();
+  }
+}
+
+// Draw initial screen before game starts
+function drawInitialScreen() {
+  ctx.fillStyle = '#87ceeb';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  
+  // Draw title text
+  ctx.fillStyle = '#333';
+  ctx.font = 'bold 48px Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText('Flappy Puzzle', canvas.width / 2, canvas.height / 2 - 100);
+  
+  // Draw phrase info
+  ctx.font = '24px Arial';
+  ctx.fillText(`Collect ${puzzle.getNonSpaceCount()} letters to reveal the phrase!`, 
+               canvas.width / 2, canvas.height / 2 - 40);
+  
+  ctx.font = '20px Arial';
+  ctx.fillStyle = '#666';
+  ctx.fillText('Click or press SPACE to start', 
+               canvas.width / 2, canvas.height / 2 + 20);
+}
+
+// Update HUD display
+function updateHUD() {
+  piecesDisplay.textContent = puzzle.getReconstructedPhrase();
+  progressText.textContent = `${puzzle.getCollectedNonSpaceCount()} / ${puzzle.getNonSpaceCount()} letters`;
+}
+
+// Start the game
+function startGame() {
+  gameStarted = true;
+  gameOver = false;
+  instructions.classList.add('hidden');
+  
+  // Create game objects
+  world = new World(canvas.width, canvas.height);
+  player = new Player(PLAYER_X, canvas.height / 2);
+  
+  // Initialize pieces to spawn - only non-space pieces
+  piecesToSpawn = puzzle.getNonSpaceIndices().slice();
+  shuffleArray(piecesToSpawn);
+  
+  // Reset game state
+  collectibles = [];
+  obstacles = [];
+  score = 0;
+  frameCount = 0;
+  lastObstacleX = canvas.width; // Start with first obstacle off screen
+  
+  // Start game loop
+  gameLoop();
+}
+
+// Utility function to shuffle array
+function shuffleArray(array) {
+  for (let i = array.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [array[i], array[j]] = [array[j], array[i]];
+  }
+}
+
+// Main game loop
+function gameLoop() {
+  if (!gameStarted || gameOver) return;
+  
+  // Update
+  update();
+  
+  // Draw
+  draw();
+  
+  // Continue loop
+  animationId = requestAnimationFrame(gameLoop);
+}
+
+// Update game state
+function update() {
+  frameCount++;
+  
+  // Update world (clouds)
+  world.update();
+  
+  // Update player (Flappy Bird style - vertical only)
+  player.update(canvas.height);
+  
+  // Spawn obstacles
+  spawnObstacles();
+  
+  // Update obstacles
+  updateObstacles();
+  
+  // Spawn collectibles
+  spawnCollectibles();
+  
+  // Update collectibles
+  updateCollectibles();
+  
+  // Check collisions
+  checkCollisions();
+  
+  // Check for victory
+  if (puzzle.isComplete() && gameStarted && !gameOver) {
+    gameStarted = false;
+    cancelAnimationFrame(animationId);
+    setTimeout(showVictory, 500);
+  }
+}
+
+// Spawn obstacles (Flappy Bird pipes)
+function spawnObstacles() {
+  // Only spawn if there are no obstacles OR the last obstacle is far enough away
+  if (obstacles.length === 0) {
+    // Spawn first obstacle
+    spawnSingleObstacle();
+  } else {
+    // Get the last obstacle
+    const lastObstacle = obstacles[obstacles.length - 1];
+    
+    // Check if last obstacle is far enough to spawn next one
+    if (lastObstacle.x < canvas.width - OBSTACLE_SPAWN_DISTANCE) {
+      spawnSingleObstacle();
+    }
+  }
+}
+
+// Spawn a single obstacle
+function spawnSingleObstacle() {
+  const maxGapY = canvas.height - MIN_GAP_Y - 50;
+  const gapY = MIN_GAP_Y + Math.random() * (maxGapY - MIN_GAP_Y);
+  
+  const obstacle = new Obstacle(canvas.width + 50, canvas.height, gapY, GAP_SIZE);
+  obstacles.push(obstacle);
+}
+
+// Update obstacles
+function updateObstacles() {
+  obstacles.forEach(obstacle => {
+    obstacle.update();
+    
+    // Check if player passed this obstacle (for score)
+    if (obstacle.hasPassed(player.x)) {
+      score++;
+    }
+  });
+  
+  // Remove off-screen obstacles
+  obstacles = obstacles.filter(o => !o.isOffScreen());
+}
+
+// Spawn collectibles
+function spawnCollectibles() {
+  // Spawn collectibles periodically (less frequently than obstacles)
+  // Place them in safe zones between obstacles
+  if (piecesToSpawn.length > 0 && frameCount % 120 === 0) {
+    const nextIndex = piecesToSpawn.shift();
+    const piece = puzzle.getPiece(nextIndex);
+    
+    const spawnX = canvas.width + 100;
+    const spawnY = 100 + Math.random() * (canvas.height - 200);
+    
+    const collectible = new Collectible(spawnX, spawnY, nextIndex, piece);
+    collectibles.push(collectible);
+  }
+}
+
+// Update all collectibles
+function updateCollectibles() {
+  collectibles.forEach(collectible => {
+    collectible.update();
+  });
+  
+  // Remove collected or off-screen collectibles
+  collectibles = collectibles.filter(c => {
+    if (c.collected) return false;
+    
+    if (c.isOffScreen()) {
+      // Re-add this piece to the spawn queue if it wasn't collected
+      if (!puzzle.collectedPieces[c.pieceIndex]) {
+        piecesToSpawn.push(c.pieceIndex);
+      }
+      return false;
+    }
+    
+    return true;
+  });
+}
+
+// Check collisions
+function checkCollisions() {
+  const playerBounds = player.getBounds();
+  
+  // Check collision with obstacles
+  for (const obstacle of obstacles) {
+    if (obstacle.collidesWith(playerBounds)) {
+      triggerGameOver();
+      return;
+    }
+  }
+  
+  // Check if player went out of bounds
+  if (player.isOutOfBounds(canvas.height)) {
+    triggerGameOver();
+    return;
+  }
+  
+  // Check collision with collectibles
+  collectibles.forEach(collectible => {
+    if (!collectible.collected && collectible.intersects(playerBounds)) {
+      collectible.collect();
+      puzzle.collectPiece(collectible.pieceIndex);
+      updateHUD();
+      playCollectSound();
+    }
+  });
+}
+
+// Trigger game over
+function triggerGameOver() {
+  gameOver = true;
+  gameStarted = false;
+  
+  // Show game over message
+  showGameOverScreen();
+}
+
+// Show game over screen
+function showGameOverScreen() {
+  // Draw semi-transparent overlay
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  
+  // Game over text
+  ctx.fillStyle = '#FF6B6B';
+  ctx.font = 'bold 60px Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText('Game Over!', canvas.width / 2, canvas.height / 2 - 50);
+  
+  // Instructions
+  ctx.fillStyle = '#FFF';
+  ctx.font = '28px Arial';
+  ctx.fillText('Click or press SPACE to retry', canvas.width / 2, canvas.height / 2 + 30);
+  
+  // Progress
+  ctx.font = '20px Arial';
+  ctx.fillStyle = '#FFD93D';
+  ctx.fillText(
+    `Collected: ${puzzle.getCollectedNonSpaceCount()} / ${puzzle.getNonSpaceCount()} letters`,
+    canvas.width / 2,
+    canvas.height / 2 + 80
+  );
+}
+
+// Reset game (on retry after game over)
+function resetGame() {
+  // Reset puzzle collected state (keep spaces collected)
+  puzzle.resetCollected();
+  
+  // Restart the game
+  startGame();
+  
+  // Update HUD
+  updateHUD();
+}
+
+// Simple collect sound effect
+function playCollectSound() {
+  try {
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+    
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    
+    oscillator.frequency.value = 800;
+    oscillator.type = 'sine';
+    
+    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
+    
+    oscillator.start(audioContext.currentTime);
+    oscillator.stop(audioContext.currentTime + 0.2);
+  } catch (e) {
+    // Audio API not supported, silently fail
+  }
+}
+
+// Draw everything
+function draw() {
+  // Clear canvas
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  
+  // Draw world (background)
+  world.draw(ctx);
+  
+  // Draw obstacles
+  obstacles.forEach(obstacle => obstacle.draw(ctx));
+  
+  // Draw collectibles
+  collectibles.forEach(collectible => collectible.draw(ctx));
+  
+  // Draw player
+  player.draw(ctx);
+  
+  // Draw game over overlay if needed
+  if (gameOver) {
+    showGameOverScreen();
+  }
+}
+
+// Show victory screen
+function showVictory() {
+  victoryScreen.classList.remove('hidden');
+  solvedPhrase.textContent = puzzle.originalPhrase;
+}
+
+// Event listeners
+startBtn.addEventListener('click', startGame);
+
+playAgainBtn.addEventListener('click', () => {
+  window.location.href = 'sender.html';
+});
+
+// Initialize when page loads
+init();

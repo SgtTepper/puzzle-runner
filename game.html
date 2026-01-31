@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Puzzle Runner - Game</title>
+  <link rel="stylesheet" href="styles/game.css">
+</head>
+<body>
+  <div class="game-container">
+    <!-- HUD at the top -->
+    <div id="hud" class="hud">
+      <div class="collected-pieces" id="collectedPieces">
+        <span class="label">Collected:</span>
+        <span id="piecesDisplay" class="pieces-display"></span>
+      </div>
+      <div class="progress" id="progress">
+        <span id="progressText">0 / 0 pieces</span>
+      </div>
+    </div>
+    
+    <!-- Canvas for the game -->
+    <canvas id="gameCanvas"></canvas>
+    
+    <!-- Victory screen -->
+    <div id="victoryScreen" class="victory-screen hidden">
+      <div class="victory-content">
+        <h1>🎉 You solved it! 🎉</h1>
+        <p class="solved-phrase" id="solvedPhrase"></p>
+        <button id="playAgainBtn" class="btn-primary">Create Your Own Puzzle</button>
+      </div>
+    </div>
+    
+    <!-- Instructions overlay -->
+    <div id="instructions" class="instructions">
+      <p>Use <strong>ARROW KEYS</strong> to move and <strong>SPACE</strong> to jump</p>
+      <p>Collect all the pieces to reveal the phrase!</p>
+      <button id="startBtn" class="btn-start">Start Game</button>
+    </div>
+  </div>
+  
+  <script type="module" src="src/game.js"></script>
+</body>
+</html>
