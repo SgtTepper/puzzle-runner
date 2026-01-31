@@ -17,6 +17,7 @@ const progressText = document.getElementById('progressText');
 const victoryScreen = document.getElementById('victoryScreen');
 const solvedPhrase = document.getElementById('solvedPhrase');
 const playAgainBtn = document.getElementById('playAgainBtn');
+const failCountDisplay = document.getElementById('failCountDisplay');
 const instructions = document.getElementById('instructions');
 const startBtn = document.getElementById('startBtn');
 const guessBtn = document.getElementById('guessBtn');
@@ -38,6 +39,7 @@ let gameOver = false;
 let gamePaused = false;
 let animationId = null;
 let score = 0;
+let failCount = 0;
 
 // Flappy Bird style constants (values may be overridden for mobile)
 let PLAYER_X = 150; // Fixed X position for player
@@ -416,9 +418,9 @@ function updateObstacles() {
 // Spawn collectibles
 function spawnCollectibles() {
   // Spawn collectibles periodically (less frequently than obstacles)
-  // Place them in safe zones between obstacles
+  // Place them in safe zones between obstacles (inside obstacle gaps when possible)
   if (piecesToSpawn.length > 0 && frameCount % COLLECTIBLE_SPAWN_FRAMES === 0) {
-    // Skip any indices that were collected via duplicate collection rule
+    // Skip any indices that were already collected
     while (piecesToSpawn.length > 0 && puzzle.collectedPieces[piecesToSpawn[0]]) {
       piecesToSpawn.shift();
     }
@@ -429,7 +431,25 @@ function spawnCollectibles() {
     if (piece == null) return;
 
     const spawnX = canvas.width + 100;
-    const spawnY = 100 + Math.random() * (canvas.height - 200);
+    let spawnY;
+
+    // Prefer spawning inside the gap of a recent obstacle so letter is reachable
+    if (obstacles.length > 0) {
+      const lastObs = obstacles[obstacles.length - 1];
+      const gap = lastObs.getGapBounds();
+      // Place collectible somewhere inside the gap (with small padding)
+      const padding = 12;
+      const availableHeight = Math.max(0, gap.height - padding * 2);
+      spawnY = gap.y + padding + Math.random() * availableHeight;
+    } else {
+      // Fallback safe vertical range when no obstacles exist
+      const safeTop = MIN_GAP_Y;
+      const safeBottom = canvas.height - MIN_GAP_Y - 40; // account for collectible height
+      spawnY = safeTop + Math.random() * Math.max(0, safeBottom - safeTop);
+    }
+
+    // Clamp to canvas bounds
+    spawnY = Math.max(10, Math.min(canvas.height - 50, spawnY));
 
     const collectible = new Collectible(spawnX, spawnY, nextIndex, piece);
     // apply mobile-friendly adjustments
@@ -503,6 +523,8 @@ function checkCollisions() {
 
 // Trigger game over
 function triggerGameOver() {
+  // Increment fail counter each time the player fails
+  failCount++;
   gameOver = true;
   gameStarted = false;
   
@@ -535,6 +557,13 @@ function showGameOverScreen() {
     canvas.width / 2,
     canvas.height / 2 + 80
   );
+
+  // Show fail counter on game over if greater than zero
+  if (failCount > 0) {
+    ctx.font = '18px Arial';
+    ctx.fillStyle = '#FFD93D';
+    ctx.fillText(`Fails: ${failCount}`, canvas.width / 2, canvas.height / 2 + 120);
+  }
 }
 
 // Reset game (on retry after game over)
@@ -599,6 +628,13 @@ function draw() {
 function showVictory() {
   victoryScreen.classList.remove('hidden');
   solvedPhrase.textContent = puzzle.originalPhrase;
+  // Show fail counter on victory screen if > 0
+  if (failCount > 0 && failCountDisplay) {
+    failCountDisplay.textContent = `Fails: ${failCount}`;
+    failCountDisplay.classList.remove('hidden');
+  } else if (failCountDisplay) {
+    failCountDisplay.classList.add('hidden');
+  }
 }
 
 // Event listeners
